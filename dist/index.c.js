@@ -1,5 +1,7 @@
 'use strict';
 
+Object.defineProperty(exports, '__esModule', { value: true });
+
 /**
  * bind event
  * @param target window | HTMLElement
@@ -127,7 +129,7 @@ function Scroll(el, options) {
     var MIN_SPEED = 0.01;
     var TOUCH_RESISTANCE = 0.1;
     var WINDAGE_RESISTANCE = 0.3;
-    var ELASTIC_RESISTANCE = 0.3;
+    var ELASTIC_RESISTANCE = 0.2;
     // @ts-ignore
     var rAf = window[getProperty('requestAnimationFrame')] || function (callback) {
         return setTimeout(callback, REFRESH_INTERVAL);
@@ -150,17 +152,18 @@ function Scroll(el, options) {
     var destroy = XTouch(container, { onStart: onStart, onEnd: onEnd, onMove: onMove, capture: { passive: false } });
     on(container, 'touchcancel', onEnd, true);
     function onStart(e) {
-        containerHeight = getOccupiedHeight(container);
-        contentHeight = getOccupiedHeight(content);
-        currentY = getTranslateY(content);
-        minTranslateY = containerHeight - contentHeight;
-        scrolling = false;
-        touchStarted = true;
+        // console.log('start:', e.touches[0].identifier, e.touches[1] && e.touches[1].identifier);
         // 初始位置的记录忽略后续按下的手指
         if (e.touches.length === 1) {
+            containerHeight = getOccupiedHeight(container);
+            contentHeight = getOccupiedHeight(content);
+            currentY = getTranslateY(content);
+            minTranslateY = containerHeight - contentHeight;
+            scrolling = false;
+            touchStarted = true;
             startCurrentY = currentY;
             deltY = 0;
-            // 需要还原currentY状态下的deltY
+            // 需要还原currentY状态下的deltY（划定到顶端或者底部的时候，有个缩减距离的效果）
             if (currentY >= 0) {
                 deltY = currentY / ELASTIC_RESISTANCE - startCurrentY;
             }
@@ -177,13 +180,21 @@ function Scroll(el, options) {
     function onMove(e) {
         if (touchStarted) {
             var delt = handleMove(e, e.changedTouches[0]);
-            if (e.changedTouches.length > 1) {
+            // console.log('move1', e.changedTouches[0].identifier);
+            if (e.changedTouches.length === 2) {
+                delt = Math.max(delt, handleMove(e, e.changedTouches[1]));
+            }
+            else if (e.changedTouches.length > 2) {
+                var deltArr = [delt];
                 for (var i = 1, len = e.changedTouches.length; i < len; i++) {
-                    delt += handleMove(e, e.changedTouches[i]);
+                    deltArr.push(handleMove(e, e.changedTouches[i]));
                 }
+                delt = Math.max.apply(Math, deltArr);
+                // console.log('move2', delt);
             }
             deltY += delt;
             currentY = startCurrentY + deltY;
+            // console.log('currentY:', currentY, ' deltY:', deltY)
             if (currentY > 0) {
                 currentY *= ELASTIC_RESISTANCE;
             }
@@ -208,16 +219,17 @@ function Scroll(el, options) {
         return 0;
     }
     function onEnd(e) {
-        touchStarted = false;
         var fingerId = e.changedTouches[0].identifier;
+        // console.log('end: ', fingerId);
         if (e.touches.length === 0) {
+            touchStarted = false;
             var touch = scrollTouches[fingerId];
             if (touch) {
                 var speed = (currentY - touch.speedStartY) / ((e.timeStamp - touch.speedStartTime) / REFRESH_INTERVAL);
                 scrollAt(speed, setTranslateY);
             }
         }
-        delete scrollTouches[fingerId];
+        scrollTouches[fingerId] = null;
     }
     function scrollTo(y) {
         scrolling = true;
@@ -303,5 +315,10 @@ function Scroll(el, options) {
         }
     };
 }
+(function (Direction) {
+    Direction[Direction["X"] = 0] = "X";
+    Direction[Direction["Y"] = 1] = "Y";
+    Direction[Direction["Both"] = 2] = "Both";
+})(exports.Direction || (exports.Direction = {}));
 
-module.exports = Scroll;
+exports.default = Scroll;

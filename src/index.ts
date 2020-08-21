@@ -17,7 +17,7 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
   const MIN_SPEED = 0.01;
   const TOUCH_RESISTANCE = 0.1;
   const WINDAGE_RESISTANCE = 0.3;
-  const ELASTIC_RESISTANCE = 0.3;
+  const ELASTIC_RESISTANCE = 0.2;
 
   // @ts-ignore
   const rAf = window[getProperty('requestAnimationFrame')] || function (callback: Function) {
@@ -45,17 +45,18 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
   on(container, 'touchcancel', onEnd, true);
 
   function onStart(e: TouchEvent) {
-    containerHeight = getOccupiedHeight(container);
-    contentHeight = getOccupiedHeight(content);
-    currentY = getTranslateY(content);
-    minTranslateY = containerHeight - contentHeight;
-    scrolling = false;
-    touchStarted = true;
+    // console.log('start:', e.touches[0].identifier, e.touches[1] && e.touches[1].identifier);
     // 初始位置的记录忽略后续按下的手指
     if (e.touches.length === 1) {
+      containerHeight = getOccupiedHeight(container);
+      contentHeight = getOccupiedHeight(content);
+      currentY = getTranslateY(content);
+      minTranslateY = containerHeight - contentHeight;
+      scrolling = false;
+      touchStarted = true;
       startCurrentY = currentY;
       deltY = 0;
-      // 需要还原currentY状态下的deltY
+      // 需要还原currentY状态下的deltY（划定到顶端或者底部的时候，有个缩减距离的效果）
       if (currentY >= 0) {
         deltY = currentY / ELASTIC_RESISTANCE - startCurrentY;
       } else if (currentY <= minTranslateY) {
@@ -72,13 +73,20 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
   function onMove(e: TouchEvent) {
     if (touchStarted) {
       let delt = handleMove(e, e.changedTouches[0])
-      if (e.changedTouches.length > 1) {
+      // console.log('move1', e.changedTouches[0].identifier);
+      if (e.changedTouches.length === 2) {
+        delt = Math.max(delt, handleMove(e, e.changedTouches[1]))
+      } else if (e.changedTouches.length > 2) {
+        const deltArr = [delt];
         for (let i = 1, len = e.changedTouches.length; i < len; i++) {
-          delt += handleMove(e, e.changedTouches[i])
+          deltArr.push(handleMove(e, e.changedTouches[i]))
         }
+        delt = Math.max.apply(Math, deltArr);
+        // console.log('move2', delt);
       }
       deltY += delt;
       currentY = startCurrentY + deltY;
+      // console.log('currentY:', currentY, ' deltY:', deltY)
       if (currentY > 0) {
         currentY *= ELASTIC_RESISTANCE
       } else if (currentY < minTranslateY) {
@@ -104,16 +112,17 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
   }
 
   function onEnd(e: TouchEvent) {
-    touchStarted = false;
     let fingerId = e.changedTouches[0].identifier;
+    // console.log('end: ', fingerId);
     if (e.touches.length === 0) {
+      touchStarted = false;
       let touch = scrollTouches[fingerId];
       if (touch) {
         const speed = (currentY - touch.speedStartY) / ((e.timeStamp - touch.speedStartTime) / REFRESH_INTERVAL);
         scrollAt(speed, setTranslateY);
       }
     }
-    delete scrollTouches[fingerId]
+    scrollTouches[fingerId] = null;
   }
 
   function scrollTo(y: number) {
@@ -205,11 +214,21 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
   }
 };
 
+export enum Direction {
+  X,
+  Y,
+  Both
+}
+
 interface IOptions {
   /**
    * 设置之后按照此数值的整数倍滚动
    */
   scrollUnit?: number;
+  /**
+   * 滚动方向
+   */
+  direction?: Direction
 }
 
 interface IScrollTouchList {

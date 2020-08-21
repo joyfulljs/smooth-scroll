@@ -53,14 +53,14 @@
   </div>
   <div id="log"></div>
 </body>
-<script src="../dist/scroll.min.js"></script>
+<script src="../dist/scroll.min.js?v=13"></script>
 <script src="vconsole.min.js"></script>
 <script>
   window.onerror = function (msg) {
     // alert(msg)
   }
   var vConsole = new VConsole();
-  new Scroll(document.querySelector('#scroll-wrapper'))
+  Scroll.default(document.querySelector('#scroll-wrapper'))
 </script>
 
 </html>
