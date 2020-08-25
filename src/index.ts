@@ -35,11 +35,8 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
   let contentHeight = 0;
   let minTranslateY = 0;
   // the current translate of Y axis
+  let originCurrentY = 0;
   let currentY = 0;
-  // the start position
-  let startCurrentY = 0;
-  // the move distance
-  let deltY = 0
 
   const destroy = XTouch(container, { onStart, onEnd, onMove, capture: { passive: false } })
   on(container, 'touchcancel', onEnd, true);
@@ -50,18 +47,10 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
     if (e.touches.length === 1) {
       containerHeight = getOccupiedHeight(container);
       contentHeight = getOccupiedHeight(content);
-      currentY = getTranslateY(content);
+      originCurrentY = currentY = getTranslateY(content);
       minTranslateY = containerHeight - contentHeight;
       scrolling = false;
       touchStarted = true;
-      startCurrentY = currentY;
-      deltY = 0;
-      // 需要还原currentY状态下的deltY（划定到顶端或者底部的时候，有个缩减距离的效果）
-      if (currentY >= 0) {
-        deltY = currentY / ELASTIC_RESISTANCE - startCurrentY;
-      } else if (currentY <= minTranslateY) {
-        deltY = (currentY - minTranslateY) / ELASTIC_RESISTANCE + minTranslateY - startCurrentY;
-      }
     }
     scrollTouches[e.changedTouches[0].identifier] = {
       touchStartY: e.changedTouches[0].pageY,
@@ -84,13 +73,23 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
         delt = Math.max.apply(Math, deltArr);
         // console.log('move2', delt);
       }
-      deltY += delt;
-      currentY = startCurrentY + deltY;
-      // console.log('currentY:', currentY, ' deltY:', deltY)
-      if (currentY > 0) {
-        currentY *= ELASTIC_RESISTANCE
-      } else if (currentY < minTranslateY) {
-        currentY = minTranslateY + (currentY - minTranslateY) * ELASTIC_RESISTANCE;
+      originCurrentY += delt;
+      if (originCurrentY > 0) {
+        if (delt > 0) {
+          currentY = originCurrentY * ELASTIC_RESISTANCE
+        } else {
+          currentY += delt;
+          originCurrentY = currentY / ELASTIC_RESISTANCE;
+        }
+      } else if (originCurrentY < minTranslateY) {
+        if (delt < 0) {
+          currentY = minTranslateY + (originCurrentY - minTranslateY) * ELASTIC_RESISTANCE;
+        } else {
+          currentY += delt;
+          originCurrentY = minTranslateY + (currentY - minTranslateY) / ELASTIC_RESISTANCE;
+        }
+      } else {
+        currentY = originCurrentY
       }
       setTranslateY(currentY);
       e.preventDefault();
@@ -155,22 +154,15 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
         // 接触摩擦： 0.1;
         // 风阻摩擦： 0.3 与速度成正比；
         currentSpeed -= (currentSpeed / startSpeed * WINDAGE_RESISTANCE + TOUCH_RESISTANCE);
-        if (isScrollUp) {
-          currentY -= currentSpeed;
-        }
-        else {
-          currentY += currentSpeed;
-        }
+        currentY += isScrollUp ? -currentSpeed : currentSpeed;
         tickCallback(currentY);
         // 最大溢出距离为即时速度的3倍
         maxOverflow = Math.min(currentSpeed * 3, MAX_OVERFLOW);
         if (currentY > maxOverflow) {
           scrollTo(0)
-        }
-        else if (currentY < minTranslateY - maxOverflow) {
+        } else if (currentY < minTranslateY - maxOverflow) {
           scrollTo(minTranslateY)
-        }
-        else if (currentSpeed > 0) {
+        } else if (currentSpeed > 0) {
           rAf(tick);
         }
       }
