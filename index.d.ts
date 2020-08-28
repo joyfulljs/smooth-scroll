@@ -1,13 +1,13 @@
 export default class ViteScroll {
     private _unbindXTouch;
-    private LOG_PREFIX;
-    VERSION: string;
-    SPEED_DETECT_INTERVAL: number;
-    MAX_OVERFLOW: number;
-    MIN_SPEED: number;
-    TOUCH_RESISTANCE: number;
-    WINDAGE_RESISTANCE: number;
-    ELASTIC_RESISTANCE: number;
+    readonly LOG_PREFIX: string;
+    readonly VERSION: string;
+    readonly SPEED_DETECT_INTERVAL: number;
+    readonly MAX_OVERFLOW: number;
+    readonly MIN_SPEED: number;
+    readonly TOUCH_RESISTANCE: number;
+    readonly WINDAGE_RESISTANCE: number;
+    readonly ELASTIC_RESISTANCE: number;
     private tranformStyleName;
     private container;
     private content;
@@ -16,9 +16,9 @@ export default class ViteScroll {
     private scrolling;
     private containerHeight;
     private contentHeight;
-    private minTranslateY;
-    private originCurrentY;
-    private currentY;
+    private minTranslate;
+    private originCurrent;
+    private current;
     constructor(el: HTMLElement, options: IOptions);
     destroy(): void;
     onStart(e: TouchEvent): void;
@@ -28,8 +28,8 @@ export default class ViteScroll {
     scrollTo(y: number): void;
     scrollAt(speed: number): void;
     resetPosition(): void;
-    setTranslateY(y: number): void;
-    getTranslateY(element: HTMLElement): number;
+    setTranslate(y: number): void;
+    getTranslate(element: HTMLElement): number;
     getOccupiedHeight(element: HTMLElement): number;
 }
 export declare enum Direction {

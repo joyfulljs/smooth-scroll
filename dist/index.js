@@ -21,10 +21,10 @@ var ViteScroll = /** @class */ (function () {
         this.scrolling = false;
         this.containerHeight = 0;
         this.contentHeight = 0;
-        this.minTranslateY = 0;
+        this.minTranslate = 0;
         // the current translate of Y axis
-        this.originCurrentY = 0;
-        this.currentY = 0;
+        this.originCurrent = 0;
+        this.current = 0;
         if (!(this instanceof ViteScroll)) {
             return new ViteScroll(el, options);
         }
@@ -62,14 +62,14 @@ var ViteScroll = /** @class */ (function () {
         if (e.touches.length === 1) {
             this.containerHeight = this.getOccupiedHeight(this.container);
             this.contentHeight = this.getOccupiedHeight(this.content);
-            this.originCurrentY = this.currentY = this.getTranslateY(this.content);
-            this.minTranslateY = this.containerHeight - this.contentHeight;
+            this.originCurrent = this.current = this.getTranslate(this.content);
+            this.minTranslate = this.containerHeight - this.contentHeight;
             this.scrolling = false;
             this.touchStarted = true;
         }
         this.scrollTouches[e.changedTouches[0].identifier] = {
-            touchStartY: e.changedTouches[0].pageY,
-            speedStartY: this.currentY,
+            touchStart: e.changedTouches[0].pageY,
+            speedStart: this.current,
             speedStartTime: e.timeStamp
         };
     };
@@ -88,39 +88,39 @@ var ViteScroll = /** @class */ (function () {
                 delt = Math.max.apply(Math, deltArr);
                 // console.log('move2', delt);
             }
-            this.originCurrentY += delt;
-            if (this.originCurrentY > 0) {
+            this.originCurrent += delt;
+            if (this.originCurrent > 0) {
                 if (delt > 0) {
-                    this.currentY = this.originCurrentY * this.ELASTIC_RESISTANCE;
+                    this.current = this.originCurrent * this.ELASTIC_RESISTANCE;
                 }
                 else {
-                    this.currentY += delt;
-                    this.originCurrentY = this.currentY / this.ELASTIC_RESISTANCE;
+                    this.current += delt;
+                    this.originCurrent = this.current / this.ELASTIC_RESISTANCE;
                 }
             }
-            else if (this.originCurrentY < this.minTranslateY) {
+            else if (this.originCurrent < this.minTranslate) {
                 if (delt < 0) {
-                    this.currentY = this.minTranslateY + (this.originCurrentY - this.minTranslateY) * this.ELASTIC_RESISTANCE;
+                    this.current = this.minTranslate + (this.originCurrent - this.minTranslate) * this.ELASTIC_RESISTANCE;
                 }
                 else {
-                    this.currentY += delt;
-                    this.originCurrentY = this.minTranslateY + (this.currentY - this.minTranslateY) / this.ELASTIC_RESISTANCE;
+                    this.current += delt;
+                    this.originCurrent = this.minTranslate + (this.current - this.minTranslate) / this.ELASTIC_RESISTANCE;
                 }
             }
             else {
-                this.currentY = this.originCurrentY;
+                this.current = this.originCurrent;
             }
-            this.setTranslateY(this.currentY);
+            this.setTranslate(this.current);
             e.preventDefault();
         }
     };
     ViteScroll.prototype._handleMove = function (e, touchItem) {
         var touch = this.scrollTouches[touchItem.identifier];
         if (touch) {
-            var delt = touchItem.pageY - touch.touchStartY;
-            touch.touchStartY = touchItem.pageY;
+            var delt = touchItem.pageY - touch.touchStart;
+            touch.touchStart = touchItem.pageY;
             if (e.timeStamp - touch.speedStartTime > this.SPEED_DETECT_INTERVAL) {
-                touch.speedStartY = this.currentY;
+                touch.speedStart = this.current;
                 touch.speedStartTime = e.timeStamp;
             }
             return delt;
@@ -135,7 +135,7 @@ var ViteScroll = /** @class */ (function () {
             this.touchStarted = false;
             var touch = this.scrollTouches[fingerId];
             if (touch) {
-                var speed = (this.currentY - touch.speedStartY) / ((e.timeStamp - touch.speedStartTime) / REFRESH_INTERVAL);
+                var speed = (this.current - touch.speedStart) / ((e.timeStamp - touch.speedStartTime) / REFRESH_INTERVAL);
                 this.scrollAt(speed);
             }
         }
@@ -148,15 +148,15 @@ var ViteScroll = /** @class */ (function () {
         this.scrolling = true;
         var tick = function () {
             if (_this.scrolling) {
-                var delt = _this.currentY - y;
+                var delt = _this.current - y;
                 if (Math.abs(delt) < _this.MIN_SPEED) {
-                    _this.currentY = y;
+                    _this.current = y;
                 }
                 else {
-                    _this.currentY -= delt * 0.12;
+                    _this.current -= delt * 0.12;
                     rAf(tick);
                 }
-                _this.setTranslateY(_this.currentY);
+                _this.setTranslate(_this.current);
             }
         };
         rAf(tick);
@@ -176,15 +176,15 @@ var ViteScroll = /** @class */ (function () {
                 // 接触摩擦： 0.1;
                 // 风阻摩擦： 0.3 与速度成正比；
                 currentSpeed -= (currentSpeed / startSpeed * _this.WINDAGE_RESISTANCE + _this.TOUCH_RESISTANCE);
-                _this.currentY += isScrollUp ? -currentSpeed : currentSpeed;
-                _this.setTranslateY(_this.currentY);
+                _this.current += isScrollUp ? -currentSpeed : currentSpeed;
+                _this.setTranslate(_this.current);
                 // 最大溢出距离为即时速度的3倍
                 maxOverflow = Math.min(currentSpeed * 3, _this.MAX_OVERFLOW);
-                if (_this.currentY > maxOverflow) {
+                if (_this.current > maxOverflow) {
                     _this.scrollTo(0);
                 }
-                else if (_this.currentY < _this.minTranslateY - maxOverflow) {
-                    _this.scrollTo(_this.minTranslateY);
+                else if (_this.current < _this.minTranslate - maxOverflow) {
+                    _this.scrollTo(_this.minTranslate);
                 }
                 else if (currentSpeed > 0) {
                     rAf(tick);
@@ -194,18 +194,18 @@ var ViteScroll = /** @class */ (function () {
         rAf(tick);
     };
     ViteScroll.prototype.resetPosition = function () {
-        if (this.currentY > 0) {
+        if (this.current > 0) {
             this.scrollTo(0);
         }
-        else if (this.currentY < this.minTranslateY) {
-            this.scrollTo(this.minTranslateY);
+        else if (this.current < this.minTranslate) {
+            this.scrollTo(this.minTranslate);
         }
     };
-    ViteScroll.prototype.setTranslateY = function (y) {
+    ViteScroll.prototype.setTranslate = function (y) {
         // @ts-ignore
         this.content.style[this.tranformStyleName] = "translate3d(0," + y + "px,0)";
     };
-    ViteScroll.prototype.getTranslateY = function (element) {
+    ViteScroll.prototype.getTranslate = function (element) {
         // @ts-ignore
         var trans = window.getComputedStyle(element)[this.tranformStyleName];
         if (trans && trans !== 'none') {
