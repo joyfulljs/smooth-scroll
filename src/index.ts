@@ -2,107 +2,137 @@
 import XTouch, { on, off } from '@joyfulljs/xtouch';
 import { getProperty } from '@joyfulljs/vendor-property';
 
-export default function Scroll(el: HTMLElement, options: IOptions) {
+const REFRESH_INTERVAL = 16.6;
+// @ts-ignore
+const rAf = window[getProperty('requestAnimationFrame')] || function (callback: Function) {
+  return setTimeout(callback, REFRESH_INTERVAL)
+};
+export default class ViteScroll {
 
-  // @ts-ignore
-  if (el.__joyfulljs_scroll_bound) {
-    return;
-  }
-  // @ts-ignore
-  el.__joyfulljs_scroll_bound = true;
+  private _unbindXTouch: () => void;
+  private LOG_PREFIX: string = '[ViteScroll]：';
 
-  const REFRESH_INTERVAL = 16;
-  const SPEED_DETECT_INTERVAL = 200;
-  const MAX_OVERFLOW = 120;
-  const MIN_SPEED = 0.01;
-  const TOUCH_RESISTANCE = 0.1;
-  const WINDAGE_RESISTANCE = 0.3;
-  const ELASTIC_RESISTANCE = 0.2;
+  public VERSION: string = 'v1.0.0';
+  public SPEED_DETECT_INTERVAL: number = 200;
+  public MAX_OVERFLOW: number = 120;
+  public MIN_SPEED: number = 0.01;
+  public TOUCH_RESISTANCE: number = 0.1;
+  public WINDAGE_RESISTANCE: number = 0.3;
+  public ELASTIC_RESISTANCE: number = 0.2;
 
-  // @ts-ignore
-  const rAf = window[getProperty('requestAnimationFrame')] || function (callback: Function) {
-    return setTimeout(callback, REFRESH_INTERVAL)
-  };
-
-  const container = el;
-  const content = el.querySelector(':first-child') as HTMLElement; // el.children[0]
-  const scrollTouches: IScrollTouchList = {};
-  const tranformStyleName = getProperty('transform');
-
-  let touchStarted = false;
-  let scrolling = false;
-  let containerHeight = 0;
-  let contentHeight = 0;
-  let minTranslateY = 0;
+  private tranformStyleName: string = getProperty('transform');
+  private container: HTMLElement;
+  private content: HTMLElement;
+  private scrollTouches: IScrollTouchList = {};
+  private touchStarted: boolean = false;
+  private scrolling: boolean = false;
+  private containerHeight: number = 0;
+  private contentHeight: number = 0;
+  private minTranslateY: number = 0;
   // the current translate of Y axis
-  let originCurrentY = 0;
-  let currentY = 0;
+  private originCurrentY: number = 0;
+  private currentY: number = 0;
 
-  const destroy = XTouch(container, { onStart, onEnd, onMove, capture: { passive: false } })
-  on(container, 'touchcancel', onEnd, true);
+  constructor(el: HTMLElement, options: IOptions) {
 
-  function onStart(e: TouchEvent) {
+    if (!(this instanceof ViteScroll)) {
+      return new ViteScroll(el, options);
+    }
+    if (!(el instanceof HTMLElement)) {
+      throw new Error(this.LOG_PREFIX + 'ViteScroll can only work on HTMLElement. Please check the `el` argument.')
+    }
+    // @ts-ignore
+    if (el.__vite_scroll_instance) {
+      console.warn(this.LOG_PREFIX + 'there is already a ViteScroll instance associated with this element.')
+      // @ts-ignore
+      return el.__vite_scroll_instance;
+    }
+
+    this.container = el;
+    this.content = el.querySelector(':first-child');
+
+    this.onStart = this.onStart.bind(this);
+    this.onMove = this.onMove.bind(this);
+    this.onEnd = this.onEnd.bind(this);
+
+    this._unbindXTouch = XTouch(this.container, {
+      onStart: this.onStart,
+      onEnd: this.onEnd,
+      onMove: this.onMove,
+      capture: { passive: false }
+    });
+    on(el, 'touchcancel', this.onEnd, true);
+  }
+
+  public destroy() {
+    off(this.container, 'touchcancel', this.onEnd, true);
+    // @ts-ignore
+    this.container.__vite_scroll_instance = undefined;
+    this._unbindXTouch();
+  }
+
+  public onStart(e: TouchEvent) {
     // console.log('start:', e.touches[0].identifier, e.touches[1] && e.touches[1].identifier);
     // 初始位置的记录忽略后续按下的手指
     if (e.touches.length === 1) {
-      containerHeight = getOccupiedHeight(container);
-      contentHeight = getOccupiedHeight(content);
-      originCurrentY = currentY = getTranslateY(content);
-      minTranslateY = containerHeight - contentHeight;
-      scrolling = false;
-      touchStarted = true;
+      this.containerHeight = this.getOccupiedHeight(this.container);
+      this.contentHeight = this.getOccupiedHeight(this.content);
+      this.originCurrentY = this.currentY = this.getTranslateY(this.content);
+      this.minTranslateY = this.containerHeight - this.contentHeight;
+      this.scrolling = false;
+      this.touchStarted = true;
     }
-    scrollTouches[e.changedTouches[0].identifier] = {
+    this.scrollTouches[e.changedTouches[0].identifier] = {
       touchStartY: e.changedTouches[0].pageY,
-      speedStartY: currentY,
+      speedStartY: this.currentY,
       speedStartTime: e.timeStamp
     }
   }
 
-  function onMove(e: TouchEvent) {
-    if (touchStarted) {
-      let delt = handleMove(e, e.changedTouches[0])
+  public onMove(e: TouchEvent) {
+    if (this.touchStarted) {
+      let delt = this._handleMove(e, e.changedTouches[0])
       // console.log('move1', e.changedTouches[0].identifier);
       if (e.changedTouches.length === 2) {
-        delt = Math.max(delt, handleMove(e, e.changedTouches[1]))
+        delt = Math.max(delt, this._handleMove(e, e.changedTouches[1]))
       } else if (e.changedTouches.length > 2) {
         const deltArr = [delt];
         for (let i = 1, len = e.changedTouches.length; i < len; i++) {
-          deltArr.push(handleMove(e, e.changedTouches[i]))
+          deltArr.push(this._handleMove(e, e.changedTouches[i]))
         }
         delt = Math.max.apply(Math, deltArr);
         // console.log('move2', delt);
       }
-      originCurrentY += delt;
-      if (originCurrentY > 0) {
+      this.originCurrentY += delt;
+      if (this.originCurrentY > 0) {
         if (delt > 0) {
-          currentY = originCurrentY * ELASTIC_RESISTANCE
+          this.currentY = this.originCurrentY * this.ELASTIC_RESISTANCE
         } else {
-          currentY += delt;
-          originCurrentY = currentY / ELASTIC_RESISTANCE;
+          this.currentY += delt;
+          this.originCurrentY = this.currentY / this.ELASTIC_RESISTANCE;
         }
-      } else if (originCurrentY < minTranslateY) {
+      } else if (this.originCurrentY < this.minTranslateY) {
         if (delt < 0) {
-          currentY = minTranslateY + (originCurrentY - minTranslateY) * ELASTIC_RESISTANCE;
+          this.currentY = this.minTranslateY + (this.originCurrentY - this.minTranslateY) * this.ELASTIC_RESISTANCE;
         } else {
-          currentY += delt;
-          originCurrentY = minTranslateY + (currentY - minTranslateY) / ELASTIC_RESISTANCE;
+          this.currentY += delt;
+          this.originCurrentY = this.minTranslateY + (this.currentY - this.minTranslateY) / this.ELASTIC_RESISTANCE;
         }
       } else {
-        currentY = originCurrentY
+        this.currentY = this.originCurrentY
       }
-      setTranslateY(currentY);
+      this.setTranslateY(this.currentY);
       e.preventDefault();
     }
   }
 
-  function handleMove(e: TouchEvent, touchItem: Touch) {
-    let touch = scrollTouches[touchItem.identifier];
+  private _handleMove(e: TouchEvent, touchItem: Touch) {
+    let touch = this.scrollTouches[touchItem.identifier];
     if (touch) {
       const delt = touchItem.pageY - touch.touchStartY;
       touch.touchStartY = touchItem.pageY;
-      if (e.timeStamp - touch.speedStartTime > SPEED_DETECT_INTERVAL) {
-        touch.speedStartY = currentY;
+      if (e.timeStamp - touch.speedStartTime > this.SPEED_DETECT_INTERVAL) {
+        touch.speedStartY = this.currentY;
         touch.speedStartTime = e.timeStamp;
       }
       return delt;
@@ -110,101 +140,98 @@ export default function Scroll(el: HTMLElement, options: IOptions) {
     return 0;
   }
 
-  function onEnd(e: TouchEvent) {
-    let fingerId = e.changedTouches[0].identifier;
+  public onEnd(e: TouchEvent) {
     // console.log('end: ', fingerId);
     if (e.touches.length === 0) {
-      touchStarted = false;
-      let touch = scrollTouches[fingerId];
+      let fingerId = e.changedTouches[0].identifier;
+      this.touchStarted = false;
+      let touch = this.scrollTouches[fingerId];
       if (touch) {
-        const speed = (currentY - touch.speedStartY) / ((e.timeStamp - touch.speedStartTime) / REFRESH_INTERVAL);
-        scrollAt(speed, setTranslateY);
+        const speed = (this.currentY - touch.speedStartY) / ((e.timeStamp - touch.speedStartTime) / REFRESH_INTERVAL);
+        this.scrollAt(speed);
       }
     }
-    scrollTouches[fingerId] = null;
-  }
-
-  function scrollTo(y: number) {
-    scrolling = true;
-    rAf(function tick() {
-      if (scrolling) {
-        let delt = currentY - y;
-        if (Math.abs(delt) < MIN_SPEED) {
-          currentY = y;
-        } else {
-          currentY -= delt * 0.12;
-          rAf(tick);
-        }
-        setTranslateY(currentY);
-      }
+    Array.from(e.changedTouches).forEach(item => {
+      this.scrollTouches[item.identifier] = null;
     })
   }
 
-  function scrollAt(speed: number, tickCallback: (e: number) => void) {
+  public scrollTo(y: number) {
+    this.scrolling = true;
+    let tick = () => {
+      if (this.scrolling) {
+        let delt = this.currentY - y;
+        if (Math.abs(delt) < this.MIN_SPEED) {
+          this.currentY = y;
+        } else {
+          this.currentY -= delt * 0.12;
+          rAf(tick);
+        }
+        this.setTranslateY(this.currentY);
+      }
+    }
+    rAf(tick);
+  }
+
+  public scrollAt(speed: number) {
     let startSpeed = Math.abs(speed);
-    if (!startSpeed || startSpeed < MIN_SPEED) {
-      resetPosition();
+    if (!startSpeed || startSpeed < this.MIN_SPEED) {
+      this.resetPosition();
       return;
     }
-    scrolling = true;
+    this.scrolling = true;
     let currentSpeed = startSpeed;
     let isScrollUp = speed < 0, maxOverflow;
-    rAf(function tick() {
-      if (scrolling) {
+    let tick = () => {
+      if (this.scrolling) {
         // 接触摩擦： 0.1;
         // 风阻摩擦： 0.3 与速度成正比；
-        currentSpeed -= (currentSpeed / startSpeed * WINDAGE_RESISTANCE + TOUCH_RESISTANCE);
-        currentY += isScrollUp ? -currentSpeed : currentSpeed;
-        tickCallback(currentY);
+        currentSpeed -= (currentSpeed / startSpeed * this.WINDAGE_RESISTANCE + this.TOUCH_RESISTANCE);
+        this.currentY += isScrollUp ? -currentSpeed : currentSpeed;
+        this.setTranslateY(this.currentY);
         // 最大溢出距离为即时速度的3倍
-        maxOverflow = Math.min(currentSpeed * 3, MAX_OVERFLOW);
-        if (currentY > maxOverflow) {
-          scrollTo(0)
-        } else if (currentY < minTranslateY - maxOverflow) {
-          scrollTo(minTranslateY)
+        maxOverflow = Math.min(currentSpeed * 3, this.MAX_OVERFLOW);
+        if (this.currentY > maxOverflow) {
+          this.scrollTo(0)
+        } else if (this.currentY < this.minTranslateY - maxOverflow) {
+          this.scrollTo(this.minTranslateY)
         } else if (currentSpeed > 0) {
           rAf(tick);
         }
       }
-    })
+    };
+    rAf(tick);
   }
 
-  function resetPosition() {
-    if (currentY > 0) {
-      scrollTo(0)
-    } else if (currentY < minTranslateY) {
-      scrollTo(minTranslateY)
+  public resetPosition() {
+    if (this.currentY > 0) {
+      this.scrollTo(0)
+    } else if (this.currentY < this.minTranslateY) {
+      this.scrollTo(this.minTranslateY)
     }
   }
 
-  function setTranslateY(y: number) {
+  public setTranslateY(y: number) {
     // @ts-ignore
-    content.style[tranformStyleName] = `translate3d(0,${y}px,0)`;
+    this.content.style[this.tranformStyleName] = `translate3d(0,${y}px,0)`;
   }
 
-  function getTranslateY(element: HTMLElement) {
+  public getTranslateY(element: HTMLElement) {
     // @ts-ignore
-    const trans = window.getComputedStyle(element)[tranformStyleName];
+    const trans = window.getComputedStyle(element)[this.tranformStyleName];
     if (trans && trans !== 'none') {
       return parseFloat(trans.split(')')[0].split(',')[5])
     }
     return 0
   }
 
-  function getOccupiedHeight(element: HTMLElement) {
+  public getOccupiedHeight(element: HTMLElement) {
     const style = window.getComputedStyle(element);
     return parseFloat(style.height)
       + parseFloat(style.marginTop)
       + parseFloat(style.marginBottom);
   }
-
-  return {
-    destroy() {
-      destroy();
-      off(container, 'touchcancel', onEnd, true);
-    }
-  }
-};
+}
 
 export enum Direction {
   X,
@@ -220,7 +247,11 @@ interface IOptions {
   /**
    * 滚动方向
    */
-  direction?: Direction
+  direction?: Direction,
+  /**
+   * 滚动内容元素选择器
+   */
+  selector?: string
 }
 
 interface IScrollTouchList {

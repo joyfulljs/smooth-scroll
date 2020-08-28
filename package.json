@@ -1,5 +1,5 @@
 {
-  "name": "@touchjs/scroll",
+  "name": "vite-scroll",
   "version": "1.0.0",
   "description": "smooth scroll ",
   "main": "dist/index.c.js",
